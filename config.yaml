@@ -1,0 +1,36 @@
+# NASA FIRMS API Key — get yours free at https://firms.modaps.eosdis.nasa.gov/api/map_key/
+MAP_KEY: "af74b025b96f3c87cfc78fd432110813"
+
+# Fire data source (VIIRS_SNPP_NRT = near-real-time, global, good resolution)
+# Other options: MODIS_NRT, VIIRS_NOAA20_NRT, LANDSAT_NRT
+SOURCE: "VIIRS_SNPP_NRT"
+
+# Bounding box for initial data pull: [min_lon, min_lat, max_lon, max_lat]
+# Default: continental US
+BBOX: [-125.0, 24.0, -66.0, 50.0]
+
+# How often to poll FIRMS (minutes)
+POLL_INTERVAL_MINUTES: 60
+
+# Watch zones — list of named bounding boxes to monitor
+WATCH_ZONES:
+  colorado_front_range:
+    label: "Colorado Front Range"
+    bbox: [-106.0, 38.5, -104.5, 40.5]
+  michigan_west:
+    label: "Western Michigan"
+    bbox: [-87.0, 42.5, -85.0, 44.0]
+
+# Alerting — enable at least one
+ALERTS:
+  discord_webhook:
+    enabled: false
+    webhook_url: "https://discord.com/api/webhooks/YOUR_WEBHOOK"
+  email:
+    enabled: false
+    smtp_host: "smtp.gmail.com"
+    smtp_port: 587
+    smtp_user: "you@gmail.com"
+    # Use an app password, not your Gmail password
+    smtp_password: "your_app_password"
+    to_address: "you@gmail.com"
