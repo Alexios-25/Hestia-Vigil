@@ -112,3 +112,7 @@ venv.bak/
 .mypy_cache/
 .dmypy.json
 .dmypy.history
+
+# Runtime / generated
+state/
+static/fire_map.html

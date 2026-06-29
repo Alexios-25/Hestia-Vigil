@@ -1,5 +1,5 @@
-# NASA FIRMS API Key — get yours free at https://firms.modaps.eosdis.nasa.gov/api/map_key/
-MAP_KEY: "af74b025b96f3c87cfc78fd432110813"
+# NASA FIRMS API key is loaded from .env via NASA_FIRMS_MAP_KEY.
+# Do not store API keys or alert credentials in this file.
 
 # Fire data source (VIIRS_SNPP_NRT = near-real-time, global, good resolution)
 # Other options: MODIS_NRT, VIIRS_NOAA20_NRT, LANDSAT_NRT
@@ -25,12 +25,12 @@ WATCH_ZONES:
 ALERTS:
   discord_webhook:
     enabled: false
-    webhook_url: "https://discord.com/api/webhooks/YOUR_WEBHOOK"
+    webhook_env: DISCORD_WEBHOOK_URL
   email:
     enabled: false
     smtp_host: "smtp.gmail.com"
     smtp_port: 587
-    smtp_user: "you@gmail.com"
+    smtp_user_env: EMAIL_USER
     # Use an app password, not your Gmail password
-    smtp_password: "your_app_password"
+    smtp_password_env: EMAIL_APP_PASSWORD
     to_address: "you@gmail.com"

@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html>
+<head>
+    
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.js"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css"/>
+    <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.0.0/css/bootstrap-glyphicons.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.2.0/css/all.min.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/python-visualization/folium/folium/templates/leaflet.awesome.rotate.min.css"/>
+    
+            <meta name="viewport" content="width=device-width,
+                initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+            <style>
+                #map_a6cd6f513ea55a56e5c0401a64a7e38d {
+                    position: relative;
+                    width: 100.0%;
+                    height: 100.0%;
+                    left: 0.0%;
+                    top: 0.0%;
+                }
+                .leaflet-container { font-size: 1rem; }
+            </style>
+
+            <style>html, body {
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
+            }
+            </style>
+
+            <style>#map {
+                position:absolute;
+                top:0;
+                bottom:0;
+                right:0;
+                left:0;
+                }
+            </style>
+
+            <script>
+                L_NO_TOUCH = false;
+                L_DISABLE_3D = false;
+            </script>
+
+        
+</head>
+<body>
+    
+    
+    <div style="
+        position: fixed; bottom: 30px; left: 30px; z-index: 1000;
+        background: rgba(0,0,0,0.8); color: #fff; padding: 10px 14px;
+        border-radius: 8px; font-size: 13px; font-family: monospace;
+        border: 1px solid #444;
+    ">
+        <b>🔥 Confidence</b><br>
+        <span style="color:#d73027;">●</span> High<br>
+        <span style="color:#fc8d59;">●</span> Nominal<br>
+        <span style="color:#fee08b;">●</span> Low<br>
+        <span style="color:#999;">●</span> Unknown<br>
+        <hr style="border-color:#444;">
+        <span style="color:#00ff88;">■</span> Watch Zone
+    </div>
+    
+    
+            <div class="folium-map" id="map_a6cd6f513ea55a56e5c0401a64a7e38d" ></div>
+        
+</body>
+<script>
+    
+    
+            var map_a6cd6f513ea55a56e5c0401a64a7e38d = L.map(
+                "map_a6cd6f513ea55a56e5c0401a64a7e38d",
+                {
+                    center: [37.0, -95.5],
+                    crs: L.CRS.EPSG3857,
+                    ...{
+  "zoom": 5,
+  "zoomControl": true,
+  "preferCanvas": false,
+}
+
+                }
+            );
+            L.control.scale().addTo(map_a6cd6f513ea55a56e5c0401a64a7e38d);
+
+            
+
+        
+    
+            var tile_layer_efb43b2a4bcb8740070363c9bdce5144 = L.tileLayer(
+                "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+                {
+  "minZoom": 0,
+  "maxZoom": 20,
+  "maxNativeZoom": 20,
+  "noWrap": false,
+  "attribution": "\u0026copy; \u003ca href=\"https://www.openstreetmap.org/copyright\"\u003eOpenStreetMap\u003c/a\u003e contributors \u0026copy; \u003ca href=\"https://carto.com/attributions\"\u003eCARTO\u003c/a\u003e",
+  "subdomains": "abcd",
+  "detectRetina": false,
+  "tms": false,
+  "opacity": 1,
+}
+
+            );
+        
+    
+            tile_layer_efb43b2a4bcb8740070363c9bdce5144.addTo(map_a6cd6f513ea55a56e5c0401a64a7e38d);
+        
+    
+            var tile_layer_da7586d98e8f090eba85b6800eeaa178 = L.tileLayer(
+                "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+                {
+  "minZoom": 0,
+  "maxZoom": 18,
+  "maxNativeZoom": 18,
+  "noWrap": false,
+  "attribution": "Esri World Imagery",
+  "subdomains": "abc",
+  "detectRetina": false,
+  "tms": false,
+  "opacity": 1,
+}
+
+            );
+        
+    
+            var feature_group_d28b95af835f3f70ee988d27ec4b947a = L.featureGroup(
+                {
+}
+            );
+        
+    
+            var circle_marker_b7fb2cb646ad7b35d3ee40672e3626a0 = L.circleMarker(
+                [39.0, -105.0],
+                {"bubblingMouseEvents": true, "color": "#fc8d59", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "#fc8d59", "fillOpacity": 0.7, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 3.848528137423857, "stroke": true, "weight": 1}
+            ).addTo(feature_group_d28b95af835f3f70ee988d27ec4b947a);
+        
+    
+        var popup_f8fc4a7255b1a7ec24528c9f18167c31 = L.popup({
+  "maxWidth": 250,
+});
+
+        
+            
+                var html_70b515586211944f834ca47c42728abd = $(`<div id="html_70b515586211944f834ca47c42728abd" style="width: 100.0%; height: 100.0%;"><b>🔥 Fire Detection</b><br>Confidence: <b>nominal</b><br>Time (UTC): 2026-06-17 00:00:00<br>Brightness (K): 300.0<br>FRP (MW): 1.0<br>Satellite: N</div>`)[0];
+                popup_f8fc4a7255b1a7ec24528c9f18167c31.setContent(html_70b515586211944f834ca47c42728abd);
+            
+        
+
+        circle_marker_b7fb2cb646ad7b35d3ee40672e3626a0.bindPopup(popup_f8fc4a7255b1a7ec24528c9f18167c31)
+        ;
+
+        
+    
+    
+            circle_marker_b7fb2cb646ad7b35d3ee40672e3626a0.bindTooltip(
+                `<div>
+                     nominal · 1.0 MW
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var circle_marker_974410eab0c279d6e172e1e2412c69e7 = L.circleMarker(
+                [39.1, -105.1],
+                {"bubblingMouseEvents": true, "color": "#d73027", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "#d73027", "fillOpacity": 0.7, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 5.683281572999748, "stroke": true, "weight": 1}
+            ).addTo(feature_group_d28b95af835f3f70ee988d27ec4b947a);
+        
+    
+        var popup_b7c50b5d94358592fed566b6963d1aac = L.popup({
+  "maxWidth": 250,
+});
+
+        
+            
+                var html_64264b870c7f03723910a0d937d5ce91 = $(`<div id="html_64264b870c7f03723910a0d937d5ce91" style="width: 100.0%; height: 100.0%;"><b>🔥 Fire Detection</b><br>Confidence: <b>high</b><br>Time (UTC): 2026-06-17 00:01:00<br>Brightness (K): 350.0<br>FRP (MW): 10.0<br>Satellite: N</div>`)[0];
+                popup_b7c50b5d94358592fed566b6963d1aac.setContent(html_64264b870c7f03723910a0d937d5ce91);
+            
+        
+
+        circle_marker_974410eab0c279d6e172e1e2412c69e7.bindPopup(popup_b7c50b5d94358592fed566b6963d1aac)
+        ;
+
+        
+    
+    
+            circle_marker_974410eab0c279d6e172e1e2412c69e7.bindTooltip(
+                `<div>
+                     high · 10.0 MW
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var circle_marker_054192774994b8b31d699cfb670b09cf = L.circleMarker(
+                [39.2, -105.2],
+                {"bubblingMouseEvents": true, "color": "#fee08b", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "#fee08b", "fillOpacity": 0.7, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 4.2, "stroke": true, "weight": 1}
+            ).addTo(feature_group_d28b95af835f3f70ee988d27ec4b947a);
+        
+    
+        var popup_650015487fbc56539b058795f07c4a43 = L.popup({
+  "maxWidth": 250,
+});
+
+        
+            
+                var html_ea93f36ce8f4379717aad8d0cdfc027f = $(`<div id="html_ea93f36ce8f4379717aad8d0cdfc027f" style="width: 100.0%; height: 100.0%;"><b>🔥 Fire Detection</b><br>Confidence: <b>low</b><br>Time (UTC): 2026-06-17 00:02:00<br>Brightness (K): 310.0<br>FRP (MW): 2.0<br>Satellite: N</div>`)[0];
+                popup_650015487fbc56539b058795f07c4a43.setContent(html_ea93f36ce8f4379717aad8d0cdfc027f);
+            
+        
+
+        circle_marker_054192774994b8b31d699cfb670b09cf.bindPopup(popup_650015487fbc56539b058795f07c4a43)
+        ;
+
+        
+    
+    
+            circle_marker_054192774994b8b31d699cfb670b09cf.bindTooltip(
+                `<div>
+                     low · 2.0 MW
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            feature_group_d28b95af835f3f70ee988d27ec4b947a.addTo(map_a6cd6f513ea55a56e5c0401a64a7e38d);
+        
+    
+            var layer_control_cb767f7c3d639c4e9d82d522fba5c7a7_layers = {
+                base_layers : {
+                    "Dark Mode" : tile_layer_efb43b2a4bcb8740070363c9bdce5144,
+                    "Satellite Imagery" : tile_layer_da7586d98e8f090eba85b6800eeaa178,
+                },
+                overlays :  {
+                    "Fire Detections" : feature_group_d28b95af835f3f70ee988d27ec4b947a,
+                },
+            };
+            let layer_control_cb767f7c3d639c4e9d82d522fba5c7a7 = L.control.layers(
+                layer_control_cb767f7c3d639c4e9d82d522fba5c7a7_layers.base_layers,
+                layer_control_cb767f7c3d639c4e9d82d522fba5c7a7_layers.overlays,
+                {
+  "position": "topright",
+  "collapsed": false,
+  "autoZIndex": true,
+}
+            ).addTo(map_a6cd6f513ea55a56e5c0401a64a7e38d);
+
+        
+</script>
+</html>
