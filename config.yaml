@@ -23,9 +23,9 @@ WATCH_ZONES:
 
 # Alerting — enable at least one
 ALERTS:
-  discord_webhook:
-    enabled: false
-    webhook_env: DISCORD_WEBHOOK_URL
+  telegram_webhook:
+    enabled: true
+    webhook_url: "https://api.telegram.org/bot8988998644:AAG4k1Po445KPZzL3X0Df-R_ZT4ZfnZ0Z2o/sendMessage?chat_id=8652152563"
   email:
     enabled: false
     smtp_host: "smtp.gmail.com"
