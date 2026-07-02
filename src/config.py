@@ -72,6 +72,12 @@ def _resolve_alert_secrets(config: dict[str, Any]) -> None:
     if not isinstance(alerts, dict):
         return
 
+    # Telegram webhook — resolve webhook_env if set
+    telegram = alerts.setdefault("telegram_webhook", {})
+    if isinstance(telegram, dict) and telegram.get("webhook_env"):
+        telegram["webhook_url"] = os.getenv(telegram["webhook_env"], "")
+
+    # Discord webhook (legacy — kept for compatibility)
     discord = alerts.setdefault("discord_webhook", {})
     if isinstance(discord, dict) and discord.get("webhook_env"):
         discord["webhook_url"] = os.getenv(discord["webhook_env"], "")
