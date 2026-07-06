@@ -6,8 +6,8 @@
 SOURCE: "VIIRS_SNPP_NRT"
 
 # Bounding box for initial data pull: [min_lon, min_lat, max_lon, max_lat]
-# Default: continental US
-BBOX: [-125.0, 24.0, -66.0, 50.0]
+# Expanded to cover the western US: Pacific coast to the Front Range
+BBOX: [-125.0, 31.0, -104.0, 49.0]
 
 # How often to poll FIRMS (minutes)
 POLL_INTERVAL_MINUTES: 60
@@ -20,12 +20,18 @@ WATCH_ZONES:
   michigan_west:
     label: "Western Michigan"
     bbox: [-87.0, 42.5, -85.0, 44.0]
+  california_sierra:
+    label: "California Sierra Nevada"
+    bbox: [-121.0, 35.0, -119.0, 40.0]
+  southwest_megafire:
+    label: "Southwest Megafire Corridor"
+    bbox: [-109.0, 33.0, -104.0, 38.0]
 
 # Alerting — enable at least one
 ALERTS:
   telegram_webhook:
     enabled: true
-    webhook_url: "https://api.telegram.org/bot8988998644:AAG4k1Po445KPZzL3X0Df-R_ZT4ZfnZ0Z2o/sendMessage?chat_id=8652152563"
+    webhook_url: "https://api.telegram.org/bot8988998644:***/sendMessage?chat_id=8652152563"
   email:
     enabled: false
     smtp_host: "smtp.gmail.com"
