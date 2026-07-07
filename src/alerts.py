@@ -3,7 +3,9 @@ Hestia Vigil — Alert detection and de-duplication.
 
 This module identifies new fire detections inside configured watch zones and
 persists alert history so the same hotspot does not trigger repeated alerts on
-future polling cycles.
+future polling cycles. When FWI data is available from the Index integration,
+alert messages now include spread index, fire danger rating, moisture codes,
+filter reason, and a Google Maps location link.
 """
 
 from __future__ import annotations
@@ -41,6 +43,14 @@ class Alert:
     last_seen_utc: str
     last_alerted_utc: str
     count: int
+    # Optional FWI context (added by index_integration)
+    isi: float | None = None
+    fwi: float | None = None
+    danger_rating: str | None = None
+    filter_reason: str | None = None
+    ffmc: float | None = None
+    dmc: float | None = None
+    dc: float | None = None
 
 
 def _utc_now_iso() -> str:
@@ -124,7 +134,8 @@ def _find_zone(row: pd.Series[Any], config: dict[str, Any]) -> tuple[str, str] |
 
 
 def _latest_payload(row: pd.Series[Any], zone_id: str, zone_label: str) -> dict[str, Any]:
-    return {
+    """Build the 'latest' payload for a detection, including FWI context if present."""
+    payload: dict[str, Any] = {
         "source": "firms",
         "zone_id": zone_id,
         "zone_label": zone_label,
@@ -140,6 +151,18 @@ def _latest_payload(row: pd.Series[Any], zone_id: str, zone_label: str) -> dict[
         "satellite": _safe_str(row.get("satellite")),
         "instrument": _safe_str(row.get("instrument")),
     }
+
+    # Include FWI data if the DataFrame has it (added by apply_fwi_filter)
+    if "isi" in row and not pd.isna(row.get("isi")):
+        payload["isi"] = _safe_float(row.get("isi"))
+        payload["fwi"] = _safe_float(row.get("fwi"))
+        payload["danger_rating"] = _safe_str(row.get("danger_rating"))
+        payload["filter_reason"] = _safe_str(row.get("fwi_reason"))
+        payload["ffmc"] = _safe_float(row.get("ffmc"))
+        payload["dmc"] = _safe_float(row.get("dmc"))
+        payload["dc"] = _safe_float(row.get("dc"))
+
+    return payload
 
 
 def _record_to_alert(key: str, record: dict[str, Any]) -> Alert:
@@ -159,6 +182,14 @@ def _record_to_alert(key: str, record: dict[str, Any]) -> Alert:
         last_seen_utc=_safe_str(record.get("last_seen_utc")),
         last_alerted_utc=_safe_str(record.get("last_alerted_utc")),
         count=int(record.get("count", 1)),
+        # FWI context
+        isi=_safe_float(latest.get("isi")),
+        fwi=_safe_float(latest.get("fwi")),
+        danger_rating=_safe_str(latest.get("danger_rating")) or None,
+        filter_reason=_safe_str(latest.get("filter_reason")) or None,
+        ffmc=_safe_float(latest.get("ffmc")),
+        dmc=_safe_float(latest.get("dmc")),
+        dc=_safe_float(latest.get("dc")),
     )
 
 
@@ -213,7 +244,8 @@ def detect_new_alerts(
     """Detect new alerts and update persistent alert history.
 
     Returns only alerts that should be sent. Existing hotspot-zone observations
-    are updated silently to avoid alert fatigue.
+    are updated silently to avoid alert fatigue. FWI data from the DataFrame
+    is captured in the alert record if present.
     """
     if fires.empty:
         return []
@@ -232,7 +264,7 @@ def detect_new_alerts(
         latest = _latest_payload(row, zone_id, zone_label)
 
         if key not in state["alerts"]:
-            record = {
+            record: dict[str, Any] = {
                 "source": "firms",
                 "zone_id": zone_id,
                 "zone_label": zone_label,
@@ -244,7 +276,12 @@ def detect_new_alerts(
             }
             state["alerts"][key] = record
             new_alerts.append(_record_to_alert(key, record))
-            logger.info("New FIRMS alert for zone %s: %s", zone_id, key)
+            logger.info(
+                "New FIRMS alert for zone %s: %s (isi=%s fwi=%s)",
+                zone_id, key,
+                _safe_str(latest.get("isi"), "N/A"),
+                _safe_str(latest.get("fwi"), "N/A"),
+            )
             continue
 
         record = state["alerts"][key]
@@ -273,19 +310,72 @@ def list_alerts(
     return [_record_to_alert(key, record) for key, record in records]
 
 
+# ---------------------------------------------------------------------------
+# Helper: ISI danger label (replicated from map_builder for independence)
+# ---------------------------------------------------------------------------
+
+
+def _isi_label(isi: float | None) -> str:
+    if isi is None:
+        return "N/A"
+    if isi >= 15:
+        return "Extreme"
+    if isi >= 8:
+        return "High"
+    if isi >= 3:
+        return "Moderate"
+    if isi >= 1:
+        return "Low"
+    return "Very Low"
+
+
+# ---------------------------------------------------------------------------
+# Alert message formatting
+# ---------------------------------------------------------------------------
+
+
 def format_alert_message(alert: Alert) -> str:
-    """Format an alert for Discord/email/SMS-style notification channels."""
+    """Format an alert for Telegram/email.
+
+    When FWI data is available (from the Index integration), the message
+    includes ISI spread danger, FWI fire danger, moisture codes, filter
+    reason, and a Google Maps link for a clickable map preview.
+    """
     frp = "N/A" if alert.frp is None else f"{alert.frp:.2f} MW"
     confidence = alert.confidence_level or alert.confidence or "unknown"
 
-    return (
-        "🔥 Hestia.Vigil Alert\n"
-        f"Zone: {alert.zone_label}\n"
-        f"Status: New FIRMS hotspot\n"
-        f"Confidence: {confidence}\n"
-        f"FRP: {frp}\n"
-        f"Location: {alert.latitude:.5f}, {alert.longitude:.5f}\n"
-        f"First seen: {alert.first_seen_utc}\n"
-        f"Acquisition: {alert.acq_datetime or 'N/A'}\n"
-        f"Alert key: {alert.key}"
-    )
+    lines: list[str] = ["🔥 Hestia.Vigil Alert"]
+    lines.append(f"Zone: {alert.zone_label}")
+    lines.append(f"Status: New FIRMS hotspot")
+
+    # FWI context (if available)
+    if alert.isi is not None:
+        isi_label = _isi_label(alert.isi)
+        fwi_str = f"{alert.fwi:.1f}" if alert.fwi is not None else "N/A"
+        danger = alert.danger_rating or "Unknown"
+        lines.append("")
+        lines.append(f"🌲 Spread (ISI): {isi_label} ({alert.isi:.1f})")
+        lines.append(f"🔥 Fire Danger: {danger} (FWI {fwi_str})")
+        lines.append(f"📡 Filter: {alert.filter_reason or 'N/A'}")
+
+    lines.append("")
+    lines.append(f"Confidence: {confidence}")
+    lines.append(f"FRP: {frp}")
+
+    if alert.ffmc is not None:
+        lines.append(
+            f"Moisture: FFMC {alert.ffmc:.1f} · "
+            f"DMC {alert.dmc:.1f} · "
+            f"DC {alert.dc:.1f}"
+        )
+
+    lines.append(f"Location: {alert.latitude:.5f}, {alert.longitude:.5f}")
+    lines.append(f"First seen: {alert.first_seen_utc}")
+    lines.append(f"Acquisition: {alert.acq_datetime or 'N/A'}")
+    lines.append(f"Alert key: {alert.key}")
+
+    # Google Maps link for Telegram rich preview
+    lines.append("")
+    lines.append(f"📍 https://www.google.com/maps?q={alert.latitude},{alert.longitude}")
+
+    return "\n".join(lines)
