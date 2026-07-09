@@ -35,7 +35,7 @@ from fwi_calculator import fwi_daily, FWIResult
 logger = logging.getLogger(__name__)
 
 # Default state file location (alongside the Vigil alert history)
-_DEFAULT_STATE_PATH = Path(__file__).resolve().parent.parent.parent / "Vigil" / "state" / "fwi_state.json"
+_DEFAULT_STATE_PATH = Path(__file__).resolve().parent.parent / "state" / "fwi_state.json"
 
 # Number of days of history to fetch for hot-starting a new location
 _DEFAULT_SPINUP_DAYS = 14
