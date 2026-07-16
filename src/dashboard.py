@@ -4,9 +4,12 @@ from __future__ import annotations
 import logging
 import time
 from flask import Flask, render_template_string
-from config import load_config
-from map_builder import build_map, save_map
-from firms_client import fetch_fires
+try:
+    from .config import load_config
+except ImportError:
+    from config import load_config
+from .map_builder import build_map, save_map
+from .firms_client import fetch_fires
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -68,13 +71,14 @@ def refresh_map():
         return
 
     logger.info("Refreshing fire data and rebuilding map...")
-    fires = fetch_fires(CONFIG)
-
-    if _HAS_FWI and not fires.empty:
-        logger.info("Applying FWI filter to %d detections...", len(fires))
-        fires = apply_fwi_filter(fires, CONFIG)
-
-    m = build_map(fires, CONFIG)
+    # Load latest GeoJSON from state/wfigs/current.json
+    geo_path = Path("state/wfigs/current.json")
+    if not geo_path.exists():
+        logger.error("No cached GeoJSON at %s", geo_path)
+        return
+    with geo_path.open("r", encoding="utf-8") as f:
+        gj = json.load(f)
+    m = build_map(gj, CONFIG)
     save_map(m, str(MAP_CACHE_PATH))
     _last_build = time.time()
 
@@ -118,7 +122,20 @@ if __name__ == "__main__":
         "Starting Vigil dashboard (poll interval: %d min)",
         POLL_INTERVAL,
     )
-    # Build the map on startup (this is the slow one — ~2 minutes
-    # for the first poll with ~250 unique locations)
+    # Fetch the latest NIFC perimeters on startup
+    try:
+        import json, urllib.request
+        url = (
+            "https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Interagency_Perimeters_Current/FeatureServer/0/query?where=1%3D1&outFields=*&f=json"
+        )
+        data = urllib.request.urlopen(url, timeout=30).read().decode("utf-8")
+        gj = json.loads(data)
+        state_dir = Path("state/wfigs")
+        state_dir.mkdir(parents=True, exist_ok=True)
+        (state_dir / "current.json").write_text(json.dumps(gj), encoding="utf-8")
+        logger.info("Fetched %d NIFC perimeters", len(gj.get("features", [])))
+    except Exception as e:
+        logger.warning("Failed to fetch NIFC perimeters on startup: %s", e)
+    # Build the map once at startup
     refresh_map()
     app.run(host='0.0.0.0', port=8080, debug=False)
