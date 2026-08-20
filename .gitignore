@@ -116,3 +116,7 @@ venv.bak/
 # Runtime / generated
 state/
 static/fire_map.html
+# Agent session artifacts
+/bash_events/
+/conversations/
+/project/
