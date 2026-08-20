@@ -5,3 +5,4 @@ flask>=3.0
 pyyaml>=6
 apscheduler>=3.10
 python-dotenv>=1.0
+shapely>=2.0

@@ -3,13 +3,23 @@
 from __future__ import annotations
 import logging
 import time
-from flask import Flask, render_template_string
+from flask import Flask, jsonify, render_template_string, request
 try:
     from .config import load_config
 except ImportError:
     from config import load_config
-from .map_builder import build_map, save_map
-from .firms_client import fetch_fires
+try:
+    from .map_builder import build_map, save_map
+except ImportError:
+    from map_builder import build_map, save_map
+try:
+    from .firms_client import fetch_fires
+except ImportError:
+    from firms_client import fetch_fires
+try:
+    from .alerts import list_alerts
+except ImportError:
+    from alerts import list_alerts
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -43,6 +53,10 @@ POLL_INTERVAL = CONFIG.get("POLL_INTERVAL_MINUTES", 60)
 # Ensure the static directory exists
 MAP_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
 
+# Persistent alert history used by the dashboard API
+_DEFAULT_ALERT_STATE_PATH = Path(__file__).resolve().parent.parent / "state" / "alert_history.json"
+_DEFAULT_ALERT_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+
 app = Flask(__name__)
 
 # Map staleness tracking
@@ -60,9 +74,10 @@ def _map_is_stale() -> bool:
 def refresh_map():
     """Rebuild the cached map if it's stale.
 
-    The map is only rebuilt when the cached file is older than
-    ``POLL_INTERVAL_MINUTES``. Multiple rapid requests for the same
-    page are served from cache.
+    Fetches both NIFC perimeters (from cached GeoJSON) and FIRMS hotspot
+    detections (live API call), then builds a map that shows only hotspots
+    confirmed by an existing perimeter.  The map is only rebuilt when the
+    cached file is older than ``POLL_INTERVAL_MINUTES``.
     """
     global _last_build
 
@@ -71,14 +86,27 @@ def refresh_map():
         return
 
     logger.info("Refreshing fire data and rebuilding map...")
-    # Load latest GeoJSON from state/wfigs/current.json
+
+    # 1. NIFC perimeters — build_map() falls back to a hotspots-only map
+    #    (with a warning) if the snapshot is missing.
     geo_path = Path("state/wfigs/current.json")
     if not geo_path.exists():
-        logger.error("No cached GeoJSON at %s", geo_path)
-        return
-    with geo_path.open("r", encoding="utf-8") as f:
-        gj = json.load(f)
-    m = build_map(gj, CONFIG)
+        logger.warning("No cached GeoJSON at %s — map will show hotspots only", geo_path)
+
+    # 2. Fetch FIRMS hotspot detections
+    fires_df = None
+    try:
+        logger.info("Fetching FIRMS hotspot data...")
+        fires_df = fetch_fires(CONFIG)
+        logger.info("FIRMS returned %d hotspot detections", len(fires_df))
+    except Exception as e:
+        logger.error("Failed to fetch FIRMS data: %s — map will show perimeters only", e)
+        fires_df = None
+
+    # 3. Build the map with both perimeters and confirmed hotspots
+    #    build_map() loads the GeoJSON internally; we pass the FIRMS DataFrame
+    #    so it can plot hotspots that fall inside perimeters.
+    m = build_map(fires_df, CONFIG)
     save_map(m, str(MAP_CACHE_PATH))
     _last_build = time.time()
 
@@ -114,6 +142,79 @@ def serve_map():
     refresh_map()
     return MAP_CACHE_PATH.read_text(), 200, {
         'Content-Type': 'text/html; charset=utf-8'
+    }
+
+
+@app.route('/api/fires')
+def api_fires():
+    """JSON endpoint — all current fire detections."""
+    try:
+        fires = fetch_fires(CONFIG)
+        import json
+        records = json.loads(
+            fires.to_json(orient="records", date_format="iso")
+        )
+        return jsonify({"count": len(records), "detections": records})
+    except Exception as exc:
+        logger.exception("API /fires error")
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route('/api/config')
+def api_config():
+    """JSON endpoint — watch zones and settings (no API key exposed)."""
+    safe_config = {
+        "source": CONFIG.get("SOURCE"),
+        "bbox": CONFIG.get("BBOX"),
+        "poll_interval_minutes": CONFIG.get("POLL_INTERVAL_MINUTES"),
+        "watch_zones": CONFIG.get("WATCH_ZONES", {}),
+    }
+    return jsonify(safe_config)
+
+
+@app.route('/api/alerts')
+def api_alerts():
+    """JSON endpoint — persisted alert history without secrets."""
+    try:
+        limit_raw = request.args.get("limit")
+        limit = int(limit_raw) if limit_raw else None
+        if limit is not None and limit < 1:
+            return jsonify({"error": "limit must be a positive integer"}), 400
+
+        alerts = list_alerts(_DEFAULT_ALERT_STATE_PATH, limit=limit)
+        records = [_alert_to_dict(alert) for alert in alerts]
+        return jsonify({"count": len(records), "alerts": records})
+    except ValueError as exc:
+        logger.exception("API /alerts validation error")
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        logger.exception("API /alerts error")
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route('/api/health')
+def health():
+    """Health check endpoint."""
+    return jsonify({"status": "ok", "service": "hestia-vigil"})
+
+
+def _alert_to_dict(alert) -> dict:
+    """Convert an Alert dataclass into a JSON-safe dictionary."""
+    return {
+        "key": alert.key,
+        "source": alert.source,
+        "zone_id": alert.zone_id,
+        "zone_label": alert.zone_label,
+        "latitude": alert.latitude,
+        "longitude": alert.longitude,
+        "confidence": alert.confidence,
+        "confidence_level": alert.confidence_level,
+        "frp": alert.frp,
+        "acq_datetime": str(alert.acq_datetime),
+        "first_seen_utc": alert.first_seen_utc,
+        "last_seen_utc": alert.last_seen_utc,
+        "last_alerted_utc": alert.last_alerted_utc,
+        "count": alert.count,
     }
 
 
