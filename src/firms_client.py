@@ -67,7 +67,11 @@ def _build_firms_url(config: dict[str, Any]) -> str:
     # day_range: number of days of data to retrieve (1-5)
     day_range = config.get("DAY_RANGE", 1)
     url = f"{_FIRMS_BASE_URL}/{map_key}/{source}/{bbox_str}/{day_range}"
-    logger.debug("FIRMS URL: %s", url)
+    # Never log the map key — redact it from the URL before logging.
+    logger.debug(
+        "FIRMS URL: %s",
+        url.replace(f"/{map_key}/", "/***REDACTED***/"),
+    )
     return url
 
 
@@ -109,7 +113,12 @@ def fetch_fires(
         config = load_config(path)
 
     url = _build_firms_url(config)
-    logger.info("Fetching FIRMS data from %s", url)
+    logger.info(
+        "Fetching FIRMS data (source=%s, bbox=%s, day_range=%s)",
+        config.get("SOURCE"),
+        config.get("BBOX"),
+        config.get("DAY_RANGE", 1),
+    )
 
     response = requests.get(url, timeout=timeout)
     response.raise_for_status()

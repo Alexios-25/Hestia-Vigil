@@ -1,42 +1,28 @@
-# NASA FIRMS API key is loaded from .env via NASA_FIRMS_MAP_KEY.
-# Do not store API keys or alert credentials in this file.
+# Hestia Vigil Configuration
 
-# Fire data source (VIIRS_SNPP_NRT = near-real-time, global, good resolution)
-# Other options: MODIS_NRT, VIIRS_NOAA20_NRT, LANDSAT_NRT
+# FIRMS satellite data source
 SOURCE: "VIIRS_SNPP_NRT"
 
-# Bounding box for initial data pull: [min_lon, min_lat, max_lon, max_lat]
-# Expanded to cover the western US: Pacific coast to the Front Range
-BBOX: [-125.0, 31.0, -104.0, 49.0]
+# Bounding box for data pull: [min_lon, min_lat, max_lon, max_lat]
+# Default: continental US
+BBOX: [-125.0, 24.0, -66.0, 50.0]
 
 # How often to poll FIRMS (minutes)
 POLL_INTERVAL_MINUTES: 60
 
-# Watch zones — list of named bounding boxes to monitor
+# Day range for FIRMS data (1-5)
+DAY_RANGE: 1
+
+# Watch zones — named bounding boxes to monitor
 WATCH_ZONES:
-  colorado_front_range:
-    label: "Colorado Front Range"
-    bbox: [-106.0, 38.5, -104.5, 40.5]
   michigan_west:
     label: "Western Michigan"
     bbox: [-87.0, 42.5, -85.0, 44.0]
-  california_sierra:
-    label: "California Sierra Nevada"
-    bbox: [-121.0, 35.0, -119.0, 40.0]
-  southwest_megafire:
-    label: "Southwest Megafire Corridor"
-    bbox: [-109.0, 33.0, -104.0, 38.0]
 
-# Alerting — enable at least one
+# Alerting
 ALERTS:
   telegram_webhook:
     enabled: true
-    webhook_url: "https://api.telegram.org/bot8988998644:***/sendMessage?chat_id=8652152563"
+    webhook_env: "TELEGRAM_WEBHOOK_URL"
   email:
     enabled: false
-    smtp_host: "smtp.gmail.com"
-    smtp_port: 587
-    smtp_user_env: EMAIL_USER
-    # Use an app password, not your Gmail password
-    smtp_password_env: EMAIL_APP_PASSWORD
-    to_address: "you@gmail.com"
