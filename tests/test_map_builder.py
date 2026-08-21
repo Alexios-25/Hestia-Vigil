@@ -71,6 +71,45 @@ class TestBuildMap(unittest.TestCase):
         html_out = self._render(None, [])
         self.assertIn("L.control.layers", html_out)
 
+    def test_dark_mode_base_layers(self):
+        html_out = self._render(None, [])
+        self.assertIn("basemaps.cartocdn.com/dark_all", html_out)
+        self.assertIn("Dark Mode", html_out)
+        self.assertIn("Esri World Imagery", html_out)
+        self.assertIn("Satellite Imagery", html_out)
+        self.assertIn("L.control.scale", html_out)
+
+    def test_watch_zones_render(self):
+        config = {
+            "BBOX": [-125.0, 24.0, -66.0, 50.0],
+            "WATCH_ZONES": {
+                "michigan_west": {
+                    "label": "Western Michigan",
+                    "bbox": [-87.0, 42.5, -85.0, 44.0],
+                }
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            snap = Path(tmpdir) / "current.json"
+            snap.write_text(json.dumps({"features": []}))
+            with patch.object(map_builder, "WFIGS_STATE_PATH", snap):
+                m = map_builder.build_map(None, config)
+        html_out = m.get_root().render()
+        self.assertIn("Western Michigan", html_out)
+        self.assertIn("#00ff88", html_out)
+
+    def test_legend_renders(self):
+        html_out = self._render(None, [])
+        self.assertIn("Confirmed hotspot", html_out)
+        self.assertIn("Watch Zone", html_out)
+        self.assertIn("monospace", html_out)
+
+    def test_frp_radius_scaling(self):
+        self.assertEqual(map_builder._frp_to_radius(None), 3)
+        self.assertEqual(map_builder._frp_to_radius(200), 15)
+        mid = map_builder._frp_to_radius(50)
+        self.assertGreater(mid, 3)
+        self.assertLess(mid, 15)
     def test_containment_colours(self):
         html_out = self._render(None, [_arcgis_feature(pct=95)])
         self.assertIn("#2ecc71", html_out)  # contained

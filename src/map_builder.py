@@ -28,8 +28,16 @@ logger = logging.getLogger(__name__)
 # Path to the NIFC WFIGS perimeter snapshot written by the dashboard at startup
 WFIGS_STATE_PATH = Path("state/wfigs/current.json")
 
-# OSM tile URL – used for both dark and light mode
-DEFAULT_LIGHT_TILES = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+# Esri World Imagery satellite tiles (toggleable alternative to dark mode)
+ESRI_WORLD_IMAGERY_TILES = (
+    "https://server.arcgisonline.com/ArcGIS/rest/services/"
+    "World_Imagery/MapServer/tile/{z}/{y}/{x}"
+)
+
+# FRP → marker radius scaling
+_MIN_RADIUS = 3
+_MAX_RADIUS = 15
+_FRP_CAP = 200.0
 
 # Containment colour mapping
 _CONTAINMENT_COLOURS = {
@@ -146,6 +154,15 @@ def _fmt(value: Any, fmt: str = "{}") -> str:
     return fmt.format(value)
 
 
+def _frp_to_radius(frp: Any) -> float:
+    """Map FRP (MW) to a circle marker radius (pixels)."""
+    if frp is None or (isinstance(frp, float) and pd.isna(frp)) or frp <= 0:
+        return _MIN_RADIUS
+    import math
+    scaled = math.sqrt(min(frp, _FRP_CAP)) / math.sqrt(_FRP_CAP)
+    return _MIN_RADIUS + scaled * (_MAX_RADIUS - _MIN_RADIUS)
+
+
 def _hotspot_popup(row: pd.Series) -> str:
     lat = float(row["latitude"])
     lon = float(row["longitude"])
@@ -175,9 +192,12 @@ def build_map(df: Any, config: Dict[str, Any], dark_mode: bool = True) -> folium
         perimeter are drawn as "confirmed"; the rest go to a dimmer
         "unconfirmed" layer.  ``None`` renders perimeters only.
     config : dict
-        Configuration dictionary – only ``BBOX`` is used (map centering).
+        Configuration dictionary – ``BBOX`` (map centering) and
+        ``WATCH_ZONES`` (green rectangle overlays).
     dark_mode : bool, default True
-        When ``True``, a CSS filter darkens the OSM tiles.
+        When ``True`` (default), CartoDB dark_matter tiles are shown;
+        otherwise Esri World Imagery satellite tiles are shown.  Both are
+        available as toggleable base layers.
     """
 
     # Load the latest perimeter snapshot
@@ -188,24 +208,26 @@ def build_map(df: Any, config: Dict[str, Any], dark_mode: bool = True) -> folium
     center_lat = (bbox[1] + bbox[3]) / 2
     center_lon = (bbox[0] + bbox[2]) / 2
 
-    m = folium.Map(location=[center_lat, center_lon], zoom_start=4)
+    m = folium.Map(
+        location=[center_lat, center_lon],
+        zoom_start=5,
+        tiles=None,
+        control_scale=True,
+    )
 
-    # Base OSM layer
+    # --- Base layers ---
     folium.TileLayer(
-        tiles=DEFAULT_LIGHT_TILES,
-        attr="OpenStreetMap",
-        name="OSM Base",
-        control=False,
+        tiles="CartoDB dark_matter",
+        name="Dark Mode",
+        overlay=False, control=True, show=dark_mode,
     ).add_to(m)
 
-    # Dark mode CSS filter
-    if dark_mode:
-        css = """
-            <style>
-                .leaflet-tile-container { filter: brightness(0.6) contrast(0.9); }
-            </style>
-        """
-        m.get_root().html.add_child(folium.Element(css))
+    folium.TileLayer(
+        tiles=ESRI_WORLD_IMAGERY_TILES,
+        attr="Esri World Imagery",
+        name="Satellite Imagery",
+        overlay=False, control=True, show=not dark_mode,
+    ).add_to(m)
 
     # ------------------------------------------------------------------
     # Fire perimeters
@@ -267,29 +289,36 @@ def build_map(df: Any, config: Dict[str, Any], dark_mode: bool = True) -> folium
                 continue
             if pd.isna(lat) or pd.isna(lon):
                 continue
+            radius = _frp_to_radius(row.get("frp"))
+            conf = row.get("confidence_level", "unknown")
+            tooltip = f"{conf} · FRP {row.get('frp', 'N/A')}"
             point = Point(lon, lat)
             is_confirmed = any(poly.contains(point) for poly in perimeter_polygons)
             if is_confirmed:
                 confirmed_n += 1
                 folium.CircleMarker(
                     location=[lat, lon],
-                    radius=5,
+                    radius=radius,
                     color="#ff4500",
+                    weight=1,
                     fill=True,
                     fill_color="#ff4500",
-                    fill_opacity=0.9,
+                    fill_opacity=0.7,
                     popup=_hotspot_popup(row),
+                    tooltip=tooltip,
                 ).add_to(confirmed_group)
             else:
                 unconfirmed_n += 1
                 folium.CircleMarker(
                     location=[lat, lon],
-                    radius=3,
+                    radius=radius,
                     color="#9e9e9e",
+                    weight=1,
                     fill=True,
                     fill_color="#9e9e9e",
-                    fill_opacity=0.5,
+                    fill_opacity=0.4,
                     popup=_hotspot_popup(row),
+                    tooltip=tooltip,
                 ).add_to(unconfirmed_group)
         logger.info(
             "Plotted %d confirmed and %d unconfirmed hotspots (of %d detections)",
@@ -300,8 +329,58 @@ def build_map(df: Any, config: Dict[str, Any], dark_mode: bool = True) -> folium
 
     confirmed_group.add_to(m)
     unconfirmed_group.add_to(m)
+
+    # ------------------------------------------------------------------
+    # Watch zone overlays
+    # ------------------------------------------------------------------
+    zone_layer = folium.FeatureGroup(name="Watch Zones")
+    for zone_id, zone_cfg in (config.get("WATCH_ZONES") or {}).items():
+        label = zone_cfg.get("label", zone_id)
+        zbbox = zone_cfg.get("bbox")
+        if not zbbox or len(zbbox) != 4:
+            logger.warning("Skipping invalid watch zone %s", zone_id)
+            continue
+        min_lon, min_lat, max_lon, max_lat = zbbox
+        folium.Rectangle(
+            bounds=[[min_lat, min_lon], [max_lat, max_lon]],
+            color="#00ff88",
+            weight=2,
+            fill=True,
+            fill_color="#00ff88",
+            fill_opacity=0.08,
+            popup=f"<b>{html.escape(label)}</b><br>Zone: {html.escape(zone_id)}",
+            tooltip=label,
+        ).add_to(zone_layer)
+    zone_layer.add_to(m)
+
     folium.LayerControl(collapsed=False).add_to(m)
+
+    # --- Legend ---
+    m.get_root().html.add_child(folium.Element(_build_legend()))
     return m
+
+
+def _build_legend() -> str:
+    """Build the HTML legend overlay for the map (dark theme, monospace)."""
+    return """
+        <div style="
+            position: fixed; bottom: 30px; left: 30px; z-index: 1000;
+            background: rgba(0,0,0,0.85); color: #fff; padding: 10px 14px;
+            border-radius: 8px; font-size: 13px; font-family: monospace;
+            border: 1px solid #444; min-width: 160px;
+        ">
+            <b>🔥 Vigil</b><br>
+            <span style="color:#ff4500;">●</span> Confirmed hotspot<br>
+            <span style="color:#9e9e9e;">●</span> Unconfirmed detection<br>
+            <hr style="border-color:#444;">
+            <b>Perimeter containment</b><br>
+            <span style="color:#d73027;">●</span> Uncontained<br>
+            <span style="color:#e67e22;">●</span> Partial<br>
+            <span style="color:#2ecc71;">●</span> Contained<br>
+            <hr style="border-color:#444;">
+            <span style="color:#00ff88;">■</span> Watch Zone
+        </div>
+    """
 
 
 def save_map(map_obj: folium.Map, path: str | Path) -> None:
