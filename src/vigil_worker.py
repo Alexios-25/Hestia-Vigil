@@ -12,6 +12,8 @@ import sys
 import time
 from pathlib import Path
 
+import pandas as pd
+
 from config import load_config
 from firms_client import fetch_fires
 from alerts import detect_new_alerts
@@ -39,6 +41,23 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 STATE_PATH = Path(__file__).resolve().parent.parent / "state" / "alert_history.json"
+LATEST_FIRES_PATH = Path(__file__).resolve().parent.parent / "state" / "latest_fires.csv"
+
+
+def _save_filtered_fires(fires: pd.DataFrame, path: Path) -> None:
+    """Persist the filtered/tiered FIRMS DataFrame for the dashboard.
+
+    The dashboard reads this file to avoid repeating the slow Open-Meteo
+    weather calls on every page load.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # Convert any non-JSON-friendly columns to strings for safe CSV round-trip.
+    out = fires.copy()
+    for col in out.columns:
+        if pd.api.types.is_datetime64_any_dtype(out[col]):
+            out[col] = out[col].astype(str)
+    out.to_csv(path, index=False)
+    logger.info("Saved %d filtered detections to %s", len(out), path)
 
 
 def poll_and_alert():
@@ -55,6 +74,9 @@ def poll_and_alert():
 
             if _HAS_FWI and not fires.empty:
                 fires = apply_fwi_filter(fires, config)
+
+            # Persist the full filtered/tiered dataset for the dashboard.
+            _save_filtered_fires(fires, LATEST_FIRES_PATH)
 
             # Filter: only process hotspots that pass the FWI filter
             if "fwi_show" in fires.columns:

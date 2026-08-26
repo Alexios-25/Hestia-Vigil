@@ -3,6 +3,9 @@
 from __future__ import annotations
 import logging
 import time
+from pathlib import Path
+
+import pandas as pd
 from flask import Flask, jsonify, render_template_string, request
 try:
     from .config import load_config
@@ -20,7 +23,6 @@ try:
     from .alerts import list_alerts
 except ImportError:
     from alerts import list_alerts
-from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # Import the Index integration (FWI filter)
@@ -53,9 +55,21 @@ POLL_INTERVAL = CONFIG.get("POLL_INTERVAL_MINUTES", 60)
 # Ensure the static directory exists
 MAP_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
 
+# Cached, filtered FIRMS data written by the worker
+LATEST_FIRES_PATH = Path(__file__).resolve().parent.parent / "state" / "latest_fires.csv"
+
 # Persistent alert history used by the dashboard API
 _DEFAULT_ALERT_STATE_PATH = Path(__file__).resolve().parent.parent / "state" / "alert_history.json"
 _DEFAULT_ALERT_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+
+def _latest_fires_is_fresh(max_age_minutes: int | None = None) -> bool:
+    """Check whether the worker's cached FIRMS file is recent enough to use."""
+    if not LATEST_FIRES_PATH.exists():
+        return False
+    max_age = max_age_minutes or max(POLL_INTERVAL * 2, 120)
+    age_seconds = time.time() - LATEST_FIRES_PATH.stat().st_mtime
+    return age_seconds <= max_age * 60
 
 app = Flask(__name__)
 
@@ -64,20 +78,30 @@ _last_build: float = 0.0  # timestamp of last map build
 
 
 def _map_is_stale() -> bool:
-    """Check if the cached map needs rebuilding."""
+    """Check if the cached map needs rebuilding.
+
+    The map is stale when the poll interval has elapsed OR when the worker
+    has written a newer filtered FIRMS cache since the map was last built.
+    """
     if not MAP_CACHE_PATH.exists():
         return True
     age_seconds = time.time() - _last_build
-    return age_seconds > POLL_INTERVAL * 60
+    if age_seconds > POLL_INTERVAL * 60:
+        return True
+    if LATEST_FIRES_PATH.exists():
+        csv_mtime = LATEST_FIRES_PATH.stat().st_mtime
+        map_mtime = MAP_CACHE_PATH.stat().st_mtime
+        if csv_mtime > map_mtime:
+            return True
+    return False
 
 
 def refresh_map():
     """Rebuild the cached map if it's stale.
 
-    Fetches both NIFC perimeters (from cached GeoJSON) and FIRMS hotspot
-    detections (live API call), then builds a map that shows only hotspots
-    confirmed by an existing perimeter.  The map is only rebuilt when the
-    cached file is older than ``POLL_INTERVAL_MINUTES``.
+    Reads the worker's filtered/tiered FIRMS cache (``state/latest_fires.csv``)
+    so the dashboard doesn't repeat the slow Open-Meteo calls. Falls back to a
+    live FIRMS pull only when the cache is missing or stale.
     """
     global _last_build
 
@@ -93,19 +117,29 @@ def refresh_map():
     if not geo_path.exists():
         logger.warning("No cached GeoJSON at %s — map will show hotspots only", geo_path)
 
-    # 2. Fetch FIRMS hotspot detections
+    # 2. Prefer the worker's filtered/tiered FIRMS cache.
     fires_df = None
-    try:
-        logger.info("Fetching FIRMS hotspot data...")
-        fires_df = fetch_fires(CONFIG)
-        logger.info("FIRMS returned %d hotspot detections", len(fires_df))
-    except Exception as e:
-        logger.error("Failed to fetch FIRMS data: %s — map will show perimeters only", e)
-        fires_df = None
+    if _latest_fires_is_fresh():
+        try:
+            logger.info("Loading filtered FIRMS cache from %s", LATEST_FIRES_PATH)
+            fires_df = pd.read_csv(LATEST_FIRES_PATH)
+            logger.info("Loaded %d detections from cache", len(fires_df))
+        except Exception as e:
+            logger.warning("Failed to load cached FIRMS data: %s", e)
+            fires_df = None
 
-    # 3. Build the map with both perimeters and confirmed hotspots
-    #    build_map() loads the GeoJSON internally; we pass the FIRMS DataFrame
-    #    so it can plot hotspots that fall inside perimeters.
+    # 3. Fallback to a live FIRMS pull if the cache isn't usable.
+    if fires_df is None:
+        try:
+            logger.info("Fetching FIRMS hotspot data...")
+            fires_df = fetch_fires(CONFIG)
+            logger.info("FIRMS returned %d hotspot detections", len(fires_df))
+        except Exception as e:
+            logger.error("Failed to fetch FIRMS data: %s — map will show perimeters only", e)
+            fires_df = None
+
+    # 4. Build the map. If the cache was used, likelihood tiers are present
+    #    and each tier becomes a toggleable overlay layer.
     m = build_map(fires_df, CONFIG)
     save_map(m, str(MAP_CACHE_PATH))
     _last_build = time.time()

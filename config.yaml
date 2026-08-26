@@ -15,9 +15,23 @@ DAY_RANGE: 1
 
 # Watch zones — named bounding boxes to monitor
 WATCH_ZONES:
-  michigan_west:
-    label: "Western Michigan"
-    bbox: [-87.0, 42.5, -85.0, 44.0]
+  colorado:
+    label: "Colorado"
+    bbox: [-109.05, 37.0, -102.04, 41.0]
+
+# Spatial clustering filter — multi-pixel wildfire structure vs isolated heat
+SPATIAL_FILTER:
+  enabled: true
+  radius_km: 1.0
+  # Validation 2026-08-25: R=1.0 N=3 max suppress with 100% perimeter recall
+  min_cluster_size: 3
+  # Variant B: ISI/FWI/BUI alone cannot show a singleton (cluster_size < 2)
+  require_cluster_for_fwi: true
+
+# Likelihood-score thresholds for ranking shown detections
+LIKELIHOOD:
+  high_threshold: 65
+  medium_threshold: 35
 
 # Alerting
 ALERTS:

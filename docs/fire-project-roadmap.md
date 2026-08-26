@@ -44,7 +44,10 @@ Implement the Canadian Fire Weather Index system from scratch in Python. It's a 
 **Difficulty:** Medium · **Time:** 1–2 weeks · **Type:** Data science / ML
 **Data needed:** USDA Fire Occurrence Database, NOAA weather, LANDFIRE vegetation/fuel load layers.
 
-Train a binary classifier that predicts whether a fire will occur in a given grid cell on a given day. Directly exercises your graduate coursework (MLE, Bayesian inference, SVMs, kernels, multivariate distributions).
+The Oracle module contains two prediction components:
+
+### Combustion Field
+Predicts ignition probability per grid cell per day. Trained on historical fire detections + no-fire samples to produce a daily spatial risk surface (binary classification: will this cell burn today?). Directly exercises graduate coursework (MLE, Bayesian inference, SVMs, kernels, multivariate distributions).
 
 **Model progression:**
 1. **Baseline:** Logistic regression with Bayesian priors (ties to your Bayesian inference work)
@@ -58,7 +61,10 @@ Train a binary classifier that predicts whether a fire will occur in a given gri
 - Performance report (precision/recall, ROC curves, calibration plots)
 - Feature importance analysis (what drives fire risk most?)
 
-**Stack from Phase 2:** Use FWI components (FFMC, DMC, DC, ISI, BUI) as engineered features.
+### Perimeter Forecast
+Predicts future fire perimeters / burned-area masks given a time series of the same fire's expanding perimeter. Takes historical perimeter frames as input and outputs projected boundary polygons for future timesteps.
+
+**Stack from Phase 2:** Use FWI components (FFMC, DMC, DC, ISI, BUI) as engineered features in Combustion Field.
 **Stack to Phase 5:** Use the model's risk scores as a prior in the Bayesian sensor fusion simulator.
 
 ---

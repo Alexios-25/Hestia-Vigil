@@ -46,6 +46,15 @@ _CONTAINMENT_COLOURS = {
     "Contained": "#2ecc71",  # green
 }
 
+# Hotspot likelihood tier colours
+_TIER_COLOURS = {
+    "Confirmed": "#ff4500",   # bright orange-red
+    "High": "#ff8c00",        # dark orange
+    "Medium": "#f1c40f",      # yellow
+    "Low": "#9e9e9e",         # grey
+    "Unlikely": "#444444",    # dark grey
+}
+
 # Perimeter simplification tolerance in degrees (~0.001° ≈ 100 m).  The raw
 # WFIGS rings total ~750k vertices, which produces a ~29 MB HTML document;
 # simplifying keeps the visual output identical at dashboard zoom levels
@@ -169,8 +178,15 @@ def _hotspot_popup(row: pd.Series) -> str:
     conf = _fmt(row.get("confidence_level"), "{} confidence")
     frp = _fmt(row.get("frp"), "FRP: {:.1f}")
     acq = _fmt(row.get("acq_datetime"))
+    tier = _fmt(row.get("likelihood_tier"), "Tier: {}")
+    score = _fmt(row.get("likelihood_score"), "Likelihood: {}%")
+    reason = _fmt(row.get("fwi_reason"), "Reason: {}")
     return (
-        f"<b>Hotspot detection</b><br>{html.escape(conf)}<br>"
+        f"<b>Hotspot detection</b><br>"
+        f"{html.escape(tier)}<br>"
+        f"{html.escape(score)}<br>"
+        f"{html.escape(reason)}<br>"
+        f"{html.escape(conf)}<br>"
         f"{html.escape(frp)}<br>Acquired: {html.escape(acq)}<br>"
         f"Lat/Lon: {lat:.4f}, {lon:.4f}<br>"
         f"<a href='https://www.google.com/maps?q={lat},{lon}' target='_blank'>Google Maps</a>"
@@ -232,8 +248,6 @@ def build_map(df: Any, config: Dict[str, Any], dark_mode: bool = True) -> folium
     # ------------------------------------------------------------------
     # Fire perimeters
     # ------------------------------------------------------------------
-    confirmed_group = folium.FeatureGroup(name="Confirmed hotspots (in perimeter)")
-    unconfirmed_group = folium.FeatureGroup(name="Unconfirmed detections")
     perimeter_polygons: List[Polygon] = []
 
     for feature in features:
@@ -276,11 +290,13 @@ def build_map(df: Any, config: Dict[str, Any], dark_mode: bool = True) -> folium
         ).add_to(m)
 
     # ------------------------------------------------------------------
-    # FIRMS hotspots
+    # FIRMS hotspots by likelihood tier
     # ------------------------------------------------------------------
+    tier_groups: Dict[str, folium.FeatureGroup] = {}
+    tier_counts: Dict[str, int] = {}
+
+    has_tiers = df is not None and "likelihood_tier" in df.columns
     if df is not None and len(df) > 0:
-        confirmed_n = 0
-        unconfirmed_n = 0
         for _, row in df.iterrows():
             try:
                 lat = float(row["latitude"])
@@ -289,46 +305,50 @@ def build_map(df: Any, config: Dict[str, Any], dark_mode: bool = True) -> folium
                 continue
             if pd.isna(lat) or pd.isna(lon):
                 continue
+
+            # Determine tier
+            if has_tiers:
+                tier = str(row.get("likelihood_tier", "Low"))
+            else:
+                # Fallback for raw FIRMS data without likelihood columns
+                point = Point(lon, lat)
+                tier = "Confirmed" if any(poly.contains(point) for poly in perimeter_polygons) else "Low"
+
+            colour = _TIER_COLOURS.get(tier, _TIER_COLOURS["Low"])
             radius = _frp_to_radius(row.get("frp"))
             conf = row.get("confidence_level", "unknown")
-            tooltip = f"{conf} · FRP {row.get('frp', 'N/A')}"
-            point = Point(lon, lat)
-            is_confirmed = any(poly.contains(point) for poly in perimeter_polygons)
-            if is_confirmed:
-                confirmed_n += 1
-                folium.CircleMarker(
-                    location=[lat, lon],
-                    radius=radius,
-                    color="#ff4500",
-                    weight=1,
-                    fill=True,
-                    fill_color="#ff4500",
-                    fill_opacity=0.7,
-                    popup=_hotspot_popup(row),
-                    tooltip=tooltip,
-                ).add_to(confirmed_group)
-            else:
-                unconfirmed_n += 1
-                folium.CircleMarker(
-                    location=[lat, lon],
-                    radius=radius,
-                    color="#9e9e9e",
-                    weight=1,
-                    fill=True,
-                    fill_color="#9e9e9e",
-                    fill_opacity=0.4,
-                    popup=_hotspot_popup(row),
-                    tooltip=tooltip,
-                ).add_to(unconfirmed_group)
+            tooltip = f"{tier} · {conf} · FRP {row.get('frp', 'N/A')}"
+
+            if tier not in tier_groups:
+                # "Unlikely" suppressed detections are hidden by default but
+                # can be toggled on via the layer control.
+                show = tier != "Unlikely"
+                tier_groups[tier] = folium.FeatureGroup(name=f"{tier} hotspots", show=show)
+                tier_counts[tier] = 0
+
+            folium.CircleMarker(
+                location=[lat, lon],
+                radius=radius,
+                color=colour,
+                weight=1,
+                fill=True,
+                fill_color=colour,
+                fill_opacity=0.7,
+                popup=_hotspot_popup(row),
+                tooltip=tooltip,
+            ).add_to(tier_groups[tier])
+            tier_counts[tier] += 1
+
         logger.info(
-            "Plotted %d confirmed and %d unconfirmed hotspots (of %d detections)",
-            confirmed_n,
-            unconfirmed_n,
-            len(df),
+            "Plotted %d hotspots by tier: %s",
+            sum(tier_counts.values()),
+            ", ".join(f"{k}={v}" for k, v in sorted(tier_counts.items())),
         )
 
-    confirmed_group.add_to(m)
-    unconfirmed_group.add_to(m)
+    # Add tier groups in a stable order
+    for tier in ("Confirmed", "High", "Medium", "Low", "Unlikely"):
+        if tier in tier_groups:
+            tier_groups[tier].add_to(m)
 
     # ------------------------------------------------------------------
     # Watch zone overlays
@@ -370,8 +390,11 @@ def _build_legend() -> str:
             border: 1px solid #444; min-width: 160px;
         ">
             <b>🔥 Vigil</b><br>
-            <span style="color:#ff4500;">●</span> Confirmed hotspot<br>
-            <span style="color:#9e9e9e;">●</span> Unconfirmed detection<br>
+            <span style="color:#ff4500;">●</span> Confirmed<br>
+            <span style="color:#ff8c00;">●</span> High likelihood<br>
+            <span style="color:#f1c40f;">●</span> Medium likelihood<br>
+            <span style="color:#9e9e9e;">●</span> Low likelihood<br>
+            <span style="color:#444444;">●</span> Unlikely<br>
             <hr style="border-color:#444;">
             <b>Perimeter containment</b><br>
             <span style="color:#d73027;">●</span> Uncontained<br>

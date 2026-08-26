@@ -62,9 +62,9 @@ class TestBuildMap(unittest.TestCase):
         )
         html_out = self._render(df, [_arcgis_feature()])
         self.assertIn("Confirmed hotspots", html_out)
-        self.assertIn("Unconfirmed detections", html_out)
+        self.assertIn("Low hotspots", html_out)  # fallback tier for raw FIRMS
         self.assertIn("#ff4500", html_out)  # confirmed marker colour
-        self.assertIn("#9e9e9e", html_out)  # unconfirmed marker colour
+        self.assertIn("#9e9e9e", html_out)  # low-likelihood marker colour
         self.assertIn("Hotspot detection", html_out)
 
     def test_layer_control_renders(self):
@@ -100,7 +100,10 @@ class TestBuildMap(unittest.TestCase):
 
     def test_legend_renders(self):
         html_out = self._render(None, [])
-        self.assertIn("Confirmed hotspot", html_out)
+        self.assertIn("Confirmed", html_out)
+        self.assertIn("High likelihood", html_out)
+        self.assertIn("Medium likelihood", html_out)
+        self.assertIn("Low likelihood", html_out)
         self.assertIn("Watch Zone", html_out)
         self.assertIn("monospace", html_out)
 
@@ -132,7 +135,7 @@ class TestBuildMap(unittest.TestCase):
             with patch.object(map_builder, "WFIGS_STATE_PATH", missing):
                 m = map_builder.build_map(df, self.config)
         html_out = m.get_root().render()
-        self.assertIn("Unconfirmed detections", html_out)
+        self.assertIn("Low hotspots", html_out)
         self.assertIn("#9e9e9e", html_out)
 
     def test_none_df_renders_perimeters_only(self):
